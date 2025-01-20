@@ -2,7 +2,6 @@
 // Subworkflow - cleanup genome
 //
 
-include { MITOCONDRION_DOWNLOAD }                from '../../../modules/local/software/download/downloadmito'
 include { SEQKIT_LISTRENAME }                    from '../../../modules/local/software/seqkit/renamefasta'
 include { SEQKIT_RENAMEGEN }                     from '../../../modules/local/software/seqkit/renamefasta'
 include { MITO_ALIGN }                           from '../../../modules/local/software/minimap/check_mito'
@@ -12,11 +11,10 @@ workflow CLEANUP_GENOME {
 
     take:
         genome        // tuple [ sample, genome ]
+	mito_ref      // path to download
 
     main:
 	
-	MITO_CHECK = MITOCONDRION_DOWNLOAD(params.mito_dw)
-
 	// cleanup naming in pipeline
 	genome.map { tuple ->
         // Extract sample and path from the tuple
@@ -37,7 +35,7 @@ workflow CLEANUP_GENOME {
 		ch_genome_orig_nams
 		)
 	
-	LIST_MITO = MITO_ALIGN(ASSEMBLY_RENAM.renamed_fasta, MITO_CHECK)
+	LIST_MITO = MITO_ALIGN(ASSEMBLY_RENAM.renamed_fasta, mito_ref)
 	LIST_MITO.list_mito.join(ASSEMBLY_RENAM.renamed_fasta)
 		.set { ch_renamed_fasta_mito }
 

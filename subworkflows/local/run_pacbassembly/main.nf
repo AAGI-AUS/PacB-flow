@@ -11,7 +11,7 @@ include { COVERAGE_CALCULATE as COV_SCAF }          from '../../../subworkflows/
 include { COVERAGE_CALCULATE as COV_SCAFREF }       from '../../../subworkflows/local/calculate_coverage/main'
 include { POLISH_GENOME }                           from '../../../subworkflows/local/run_polypolish/main'
 include { CLEANUP_GENOME }                          from '../../../subworkflows/local/cleanup_genomes_final/main'
-
+include { MITOCONDRION_DOWNLOAD }                   from '../../../modules/local/software/download/downloadmito'
 
 // Define functions
 def collectAssemblies(ASSEMBLY, allAssembliesChannel) {
@@ -149,8 +149,11 @@ workflow ASSEMBLY_PIPELINE {
 	// Run stats on final output
         ABYSS_FAC(all_assemblies)
 
+	// Download the database
+	MITO_CHECK = MITOCONDRION_DOWNLOAD(params.mito_dw)
+
 	// Cleanup final genome
-	CLEANED_GENOME = CLEANUP_GENOME(ASSEMBLY.assembly)
+	CLEANED_GENOME = CLEANUP_GENOME(ASSEMBLY.assembly, MITO_CHECK.mito_ref)
 
 
     emit:

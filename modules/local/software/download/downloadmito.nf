@@ -6,7 +6,7 @@ process MITOCONDRION_DOWNLOAD {
 	val(mito_genomes)
 
 	output:
-	path("mito_concatenated_output.fna.gz")
+	path("mito_concatenated_output.fna.gz"), emit: mito_ref
 	
 	script:
 	"""
