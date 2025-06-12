@@ -18,4 +18,5 @@ export NXF_SINGULARITY_CACHEDIR="./work"
 
 nextflow run ./main.nf -resume \
 	-profile pawsey_setonix,singularity \
-	--manifest samples.tsv	
+	--manifest samples.tsv \
+	--assembler hifiasm	

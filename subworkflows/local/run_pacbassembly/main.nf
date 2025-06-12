@@ -3,6 +3,7 @@
 //
 
 include { CANU_ASSEMBLY }                           from '../../../modules/local/software/canu/assemblereads'
+include { HIFIASM }                                 from '../../../modules/nf-core/hifiasm/main'
 include { ABYSS_FAC }                               from '../../../modules/local/software/abyss/abyssfac-stats'
 include { NTJOIN_SCAFFOLD }                         from '../../../modules/local/software/ntjoin/scaffoldassembly'
 include { NTLINK_SCAFFOLD }                         from '../../../modules/local/software/ntlink/scaffoldassembly'
@@ -15,32 +16,67 @@ include { MITOCONDRION_DOWNLOAD }                   from '../../../modules/local
 
 // Define functions
 def collectAssemblies(ASSEMBLY, allAssembliesChannel) {
-	return ASSEMBLY.map { it -> it[1] }
-	.mix(allAssembliesChannel)
-	.collect()
-	}
+    return ASSEMBLY.map { it -> it[1] }
+    .mix(allAssembliesChannel)
+    .collect()
+}
 
 workflow ASSEMBLY_PIPELINE {
 
     take:
         assembly_lr // tuple [sample, lr_reads ]
-        assembly_sr // tuple [sample, sr1_reads, sr2_reads]
+        assembly_sr // tuple [sample, sr1_reads, sr2_reads] // reads may be null
 
     main:
-		
         //
         allAssembliesChannel = Channel.empty()
 
-        // Run primary assembly
-        CANU_ASSEMBLY_OUT = CANU_ASSEMBLY(assembly_lr)
-        assembly_lr.join(CANU_ASSEMBLY_OUT.assembly)
-                   .set { ch_readslr_assembly }
-        COV_PRIMARY(ch_readslr_assembly)
-        ASSEMBLY = CANU_ASSEMBLY_OUT
-	
-	// collect assemblies
-	collectAssemblies(ASSEMBLY.assembly, allAssembliesChannel)
-        	.set { all_assemblies }
+        // Choose assembly method based on parameter
+        if (params.assembler == 'hifiasm') {
+            // Prepare input for HIFIASM - it expects 4 input channels
+            // Convert assembly_lr to the format expected by HIFIASM
+            hifiasm_input_ch1 = assembly_lr.map { sample, reads ->
+                def meta = [id: sample]
+                tuple(meta, reads, [])  // long_reads, ul_reads (empty)
+            }
+    
+            // Create empty channels for the other 3 inputs
+            hifiasm_input_ch2 = Channel.empty()  // parental kmer dumps
+            hifiasm_input_ch3 = Channel.empty()  // Hi-C reads  
+            hifiasm_input_ch4 = Channel.empty()  // bin files
+    
+            HIFIASM_OUT = HIFIASM(
+                hifiasm_input_ch1,
+                hifiasm_input_ch2, 
+                hifiasm_input_ch3,
+                hifiasm_input_ch4
+            )
+    
+            // HIFIASM outputs primary contigs in GFA format, we need to extract the assembly
+            // For this example, we'll use the primary_contigs output
+            ASSEMBLY = [
+                assembly: HIFIASM_OUT.primary_contigs.map { meta, gfa -> 
+                    tuple(meta.id, gfa) 
+                },
+               versions: HIFIASM_OUT.versions
+               ]
+            
+             assembly_lr.join(ASSEMBLY.assembly)
+                        .set { ch_readslr_assembly }
+             COV_PRIMARY(ch_readslr_assembly)
+            
+        } else {
+            // Default to CANU assembly
+            CANU_ASSEMBLY_OUT = CANU_ASSEMBLY(assembly_lr)
+            assembly_lr.join(CANU_ASSEMBLY_OUT.assembly)
+                       .set { ch_readslr_assembly }
+            COV_PRIMARY(ch_readslr_assembly)
+            ASSEMBLY = CANU_ASSEMBLY_OUT
+        }
+
+        // collect assemblies
+        collectAssemblies(ASSEMBLY.assembly, allAssembliesChannel)
+            .set { all_assemblies }
 
         // Default suffix
         nam_suffix = ''
@@ -48,11 +84,11 @@ workflow ASSEMBLY_PIPELINE {
         // Long read scaffolding (ntLink) if ntlink_run is True
         if (params.ntlink_run) {
 
-	    // ensure samples matching
-	    assembly_lr.join(ASSEMBLY.assembly)
-			.set { ch_assembly_lr_primary_assembly }
+            // ensure samples matching
+            assembly_lr.join(ASSEMBLY.assembly)
+                    .set { ch_assembly_lr_primary_assembly }
 
-	    // scaffold with long reads
+            // scaffold with long reads
             ASSEMBLY = NTLINK_SCAFFOLD(ch_assembly_lr_primary_assembly)
 
             nam_suffix = ".ntlink"
@@ -66,98 +102,117 @@ workflow ASSEMBLY_PIPELINE {
             def cov_scaf_output = COV_SCAF(ch_readslr_assembly_scaf)
 
             // Ensure the assembly after ntLink is mixed into all assemblies
-	    collectAssemblies(ASSEMBLY.assembly, all_assemblies)
+            collectAssemblies(ASSEMBLY.assembly, all_assemblies)
                 .set { all_assemblies }
 
         }
 
         // NTJoin scaffolding (if ntjoin_ref is provided)
-	// Run NTJoin scaffolding AFTER ntLink and COV_SCAF if both are used
-	if (params.ntjoin_ref) {
-		if (file(params.ntjoin_ref).exists()) {
-                	        ntJoin_input_ref = file(params.ntjoin_ref)
-                	} else {
-                        	throw new FileNotFoundException("File ${params.ntjoin_ref} does not exist.")
-                	}
-	}
+        // Run NTJoin scaffolding AFTER ntLink and COV_SCAF if both are used
+        if (params.ntjoin_ref) {
+            if (file(params.ntjoin_ref).exists()) {
+                            ntJoin_input_ref = file(params.ntjoin_ref)
+                    } else {
+                            throw new FileNotFoundException("File ${params.ntjoin_ref} does not exist.")
+                    }
+        }
 
-	if (params.ntlink_run && params.ntjoin_ref) {
+        if (params.ntlink_run && params.ntjoin_ref) {
 
-    		// Wait for ntLink and COV_SCAF to finish before running NTJoin
-    		ch_readslr_assembly_scaf
-        		.set { delayed_assembly_lr_scaf }
-    		// Now run NTJOIN_SCAFFOLD on the delayed channel
-    		ASSEMBLY = NTJOIN_SCAFFOLD(ASSEMBLY.assembly, ntJoin_input_ref)
+            // Wait for ntLink and COV_SCAF to finish before running NTJoin
+            ch_readslr_assembly_scaf
+                .set { delayed_assembly_lr_scaf }
+            // Now run NTJOIN_SCAFFOLD on the delayed channel
+            ASSEMBLY = NTJOIN_SCAFFOLD(ASSEMBLY.assembly, ntJoin_input_ref)
 
-    		// Update `assembly_lr_scafref` with suffix after NTJoin
-    		delayed_assembly_lr_scaf.map { val, reads, fasta -> tuple("${val}.ntjoin", reads) }
-                	            .set { assembly_lr_scafref }
+            // Update `assembly_lr_scafref` with suffix after NTJoin
+            delayed_assembly_lr_scaf.map { val, reads, fasta -> tuple("${val}.ntjoin", reads) }
+                                .set { assembly_lr_scafref }
 
-    		// Join NTJoin assembly and run COV_SCAFREF
-    		assembly_lr_scafref.join(ASSEMBLY.assembly)
-                	       .set { ch_readslr_assembly_scaf_ref }
+            // Join NTJoin assembly and run COV_SCAFREF
+            assembly_lr_scafref.join(ASSEMBLY.assembly)
+                           .set { ch_readslr_assembly_scaf_ref }
 
-    		// Run COV_SCAFREF at NTJoin stage
-    		def cov_scafref_output = COV_SCAFREF(ch_readslr_assembly_scaf_ref)
+            // Run COV_SCAFREF at NTJoin stage
+            def cov_scafref_output = COV_SCAFREF(ch_readslr_assembly_scaf_ref)
 
-		// Ensure the assembly after ntJoin is mixed into all assemblies
-		collectAssemblies(ASSEMBLY.assembly, all_assemblies)
-                	.set { all_assemblies }
+            // Ensure the assembly after ntJoin is mixed into all assemblies
+            collectAssemblies(ASSEMBLY.assembly, all_assemblies)
+                    .set { all_assemblies }
 
-	} else if (params.ntjoin_ref) {
-    		// If only ntJoin_ref is provided, run NTJOIN directly
-    		ASSEMBLY = NTJOIN_SCAFFOLD(ASSEMBLY.assembly, ntJoin_input_ref)
+        } else if (params.ntjoin_ref) {
+            // If only ntJoin_ref is provided, run NTJOIN directly
+            ASSEMBLY = NTJOIN_SCAFFOLD(ASSEMBLY.assembly, ntJoin_input_ref)
 
-    		// Update `assembly_lr_scafref` with suffix after NTJoin
-    		assembly_lr.map { val, path -> tuple("${val}.ntjoin", path) }
-               		.set { assembly_lr_scafref }
+            // Update `assembly_lr_scafref` with suffix after NTJoin
+            assembly_lr.map { val, path -> tuple("${val}.ntjoin", path) }
+                   .set { assembly_lr_scafref }
 
-    		// Join NTJoin assembly and run COV_SCAFREF
-		assembly_lr_scafref.join(ASSEMBLY.assembly)
-                	.set { ch_readslr_assembly_scaf_refOnly	}
+            // Join NTJoin assembly and run COV_SCAFREF
+            assembly_lr_scafref.join(ASSEMBLY.assembly)
+                    .set { ch_readslr_assembly_scaf_refOnly    }
 
-    		// Run COV_SCAFREF at NTJoin stage
-    		def cov_scafref_output = COV_SCAFREF(ch_readslr_assembly_scaf_refOnly)
-		
-		// Ensure the assembly after ntJoin is mixed into all assemblies
-		collectAssemblies(ASSEMBLY.assembly, all_assemblies)
-                	.set { all_assemblies }
-	}
-	
-	assembly_sr.map { val, reads1, reads2 ->
-    		if (params.ntlink_run && params.ntjoin_ref) {
-        	// Both ntlink and ntjoin_ref are true
-        		tuple("${val}.ntlink.ntjoin", reads1, reads2)
-    		} else if (params.ntlink_run) {
-        	// Only ntlink_run is true
-        		tuple("${val}.ntlink", reads1, reads2)
-    		} else if (params.ntjoin_ref) {
-        	// Only ntjoin_ref is true
-        		tuple("${val}.ntjoin", reads1, reads2)
-    		} else {
-        	// Default case if none of the above conditions are true
-        		tuple(val, reads1, reads2)
-    	}
-		}.set { assembly_sr_scafref }
-	
-	// Polish genome with short reads, merge input channel
-	ASSEMBLY = POLISH_GENOME(assembly_sr_scafref, ASSEMBLY.assembly)
+            // Run COV_SCAFREF at NTJoin stage
+            def cov_scafref_output = COV_SCAFREF(ch_readslr_assembly_scaf_refOnly)
+            
+            // Ensure the assembly after ntJoin is mixed into all assemblies
+            collectAssemblies(ASSEMBLY.assembly, all_assemblies)
+                    .set { all_assemblies }
+        }
+        
 
-	collectAssemblies(ASSEMBLY.assembly, all_assemblies)
-                .set { all_assemblies }
+        assembly_sr.map { val, reads1, reads2 ->
+        if (params.ntlink_run && params.ntjoin_ref) {
+            tuple("${val}.ntlink.ntjoin", reads1, reads2)
+        } else if (params.ntlink_run) {
+            tuple("${val}.ntlink", reads1, reads2)
+        } else if (params.ntjoin_ref) {
+            tuple("${val}.ntjoin", reads1, reads2)
+        } else {
+            tuple(val, reads1, reads2)
+        }
+        }.set { assembly_sr_scafref }
 
-	// Run stats on final output
+        
+        // Polish genome with short reads (only for samples that have short reads)
+        if (params.polish_genome) {
+            assembly_sr_scafref
+            .filter { sample, reads1, reads2 -> 
+                reads1 != null && reads2 != null 
+            }
+            .set { samples_with_sr }
+    
+        // Only run polishing if we have samples with short reads
+        samples_with_sr
+            .ifEmpty { 
+                log.info "No samples with short reads found - skipping polishing for all samples"
+            }
+            .set { sr_for_polishing }
+    
+            // Run polishing only on samples that have short reads
+            if (!sr_for_polishing.isEmpty()) {
+                ASSEMBLY = POLISH_GENOME(sr_for_polishing, ASSEMBLY.assembly)
+            }
+        } else {
+            log.info "Genome polishing disabled (polish_genome=false)"
+        }
+
+    
+        collectAssemblies(ASSEMBLY.assembly, all_assemblies)
+               .set { all_assemblies }
+
+        // Run stats on final output
         ABYSS_FAC(all_assemblies)
 
-	// Download the database
-	MITO_CHECK = MITOCONDRION_DOWNLOAD(params.mito_dw)
+        // Download the database
+        MITO_CHECK = MITOCONDRION_DOWNLOAD(params.mito_dw)
 
-	// Cleanup final genome
-	CLEANED_GENOME = CLEANUP_GENOME(ASSEMBLY.assembly, MITO_CHECK.mito_ref)
+        // Cleanup final genome
+        CLEANED_GENOME = CLEANUP_GENOME(ASSEMBLY.assembly, MITO_CHECK.mito_ref)
 
 
     emit:
-        versions = CANU_ASSEMBLY.out.versions
+        versions = params.assembler == 'hifiasm' ? HIFIASM_OUT.versions : CANU_ASSEMBLY.out.versions
         scaffolded = ASSEMBLY.assembly
-	cleanup_final_genome = CLEANED_GENOME.out_genome
+        cleanup_final_genome = CLEANED_GENOME.out_genome
 }
