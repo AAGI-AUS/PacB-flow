@@ -33,38 +33,40 @@ workflow ASSEMBLY_PIPELINE {
 
         // Choose assembly method based on parameter
         if (params.assembler == 'hifiasm') {
-            // Prepare input for HIFIASM - it expects 4 input channels
-            // Convert assembly_lr to the format expected by HIFIASM
-            hifiasm_input_ch1 = assembly_lr.map { sample, reads ->
-                def meta = [id: sample]
-                tuple(meta, reads, [])  // long_reads, ul_reads (empty)
-            }
+        // Debug: Check input
+        assembly_lr.view { "HIFIASM input: $it" }
     
-            // Create empty channels for the other 3 inputs
-            hifiasm_input_ch2 = Channel.empty()  // parental kmer dumps
-            hifiasm_input_ch3 = Channel.empty()  // Hi-C reads  
-            hifiasm_input_ch4 = Channel.empty()  // bin files
-    
-            HIFIASM_OUT = HIFIASM(
-                hifiasm_input_ch1,
-                hifiasm_input_ch2, 
-                hifiasm_input_ch3,
-                hifiasm_input_ch4
-            )
-    
-            // HIFIASM outputs primary contigs in GFA format, we need to extract the assembly
-            // For this example, we'll use the primary_contigs output
-            ASSEMBLY = [
-                assembly: HIFIASM_OUT.primary_contigs.map { meta, gfa -> 
-                    tuple(meta.id, gfa) 
-                },
-               versions: HIFIASM_OUT.versions
-               ]
-            
-             assembly_lr.join(ASSEMBLY.assembly)
-                        .set { ch_readslr_assembly }
-             COV_PRIMARY(ch_readslr_assembly)
-            
+        // Prepare input for HIFIASM
+        hifiasm_input_ch1 = assembly_lr.map { sample, reads ->
+            def meta = [id: sample]
+            tuple(meta, reads, [])
+        }
+
+        // Create matching empty channels
+        hifiasm_input_ch2 = assembly_lr.map { sample, reads -> tuple([id: sample], [], []) }
+        hifiasm_input_ch3 = assembly_lr.map { sample, reads -> tuple([id: sample], [], []) }
+        hifiasm_input_ch4 = assembly_lr.map { sample, reads -> tuple([id: sample], []) }
+
+        HIFIASM_OUT = HIFIASM(
+            hifiasm_input_ch1,
+            hifiasm_input_ch2,
+            hifiasm_input_ch3,
+            hifiasm_input_ch4
+        )
+
+        // Debug: Check HIFIASM output
+        HIFIASM_OUT.primary_contigs.view { "HIFIASM primary contigs: $it" }
+
+        ASSEMBLY = [
+            assembly: HIFIASM_OUT.primary_contigs.map { meta, gfa ->
+                tuple(meta.id, gfa)
+            },
+            versions: HIFIASM_OUT.versions
+        ]
+
+        assembly_lr.join(ASSEMBLY.assembly)
+                   .set { ch_readslr_assembly }
+        COV_PRIMARY(ch_readslr_assembly)            
         } else {
             // Default to CANU assembly
             CANU_ASSEMBLY_OUT = CANU_ASSEMBLY(assembly_lr)
@@ -173,26 +175,23 @@ workflow ASSEMBLY_PIPELINE {
         }
         }.set { assembly_sr_scafref }
 
-        
-        // Polish genome with short reads (only for samples that have short reads)
         if (params.polish_genome) {
             assembly_sr_scafref
-            .filter { sample, reads1, reads2 -> 
-                reads1 != null && reads2 != null 
+            .filter { sample, reads1, reads2 ->
+                reads1 != null && reads2 != null
             }
-            .set { samples_with_sr }
-    
-        // Only run polishing if we have samples with short reads
-        samples_with_sr
             .ifEmpty { 
                 log.info "No samples with short reads found - skipping polishing for all samples"
+                Channel.empty()
             }
-            .set { sr_for_polishing }
-    
-            // Run polishing only on samples that have short reads
-            if (!sr_for_polishing.isEmpty()) {
-                ASSEMBLY = POLISH_GENOME(sr_for_polishing, ASSEMBLY.assembly)
-            }
+            .set { samples_with_sr }
+
+        // Only run polishing if channel is not empty
+        // The process will simply not execute if the input channel is empty
+        if (samples_with_sr) {
+            ASSEMBLY = POLISH_GENOME(samples_with_sr, ASSEMBLY.assembly)
+        }
+
         } else {
             log.info "Genome polishing disabled (polish_genome=false)"
         }
