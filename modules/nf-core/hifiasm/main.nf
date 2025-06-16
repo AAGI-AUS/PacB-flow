@@ -17,7 +17,8 @@ process HIFIASM {
     tuple val(meta), path("*.r_utg.gfa")                             , emit: raw_unitigs
     tuple val(meta), path("*.bin")                                   , emit: bin_files        , optional: true
     tuple val(meta), path("*.p_utg.gfa")                             , emit: processed_unitigs, optional: true
-    tuple val(meta), path("${prefix}.{p_ctg,bp.p_ctg,hic.p_ctg}.gfa"), emit: primary_contigs  , optional: true
+    tuple val(meta), path("${prefix}.p_ctg.gfa")                     , emit: primary_contigs  , optional: true
+    tuple val(meta), path("${prefix}.p_ctg.fasta")                   , emit: primary_contigs_fasta , optional: true
     tuple val(meta), path("${prefix}.{a_ctg,hic.a_ctg}.gfa")         , emit: alternate_contigs, optional: true
     tuple val(meta), path("${prefix}.*.hap1.p_ctg.gfa")              , emit: hap1_contigs     , optional: true
     tuple val(meta), path("${prefix}.*.hap2.p_ctg.gfa")              , emit: hap2_contigs     , optional: true
@@ -76,7 +77,9 @@ process HIFIASM {
     if [ -f ${prefix}.ovlp.paf ]; then
         gzip ${prefix}.ovlp.paf
     fi
-
+    
+    awk '/^S/{print ">"\$2; print \$3}' ${prefix}.bp.p_ctg.gfa > ${prefix}.bp.p_ctg.fasta
+    
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         hifiasm: \$(hifiasm --version 2>&1)

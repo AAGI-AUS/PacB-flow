@@ -55,11 +55,11 @@ workflow ASSEMBLY_PIPELINE {
         )
 
         // Debug: Check HIFIASM output
-        HIFIASM_OUT.primary_contigs.view { "HIFIASM primary contigs: $it" }
+        HIFIASM_OUT.primary_contigs_fasta.view { "HIFIASM primary contigs: $it" }
 
         ASSEMBLY = [
-            assembly: HIFIASM_OUT.primary_contigs.map { meta, gfa ->
-                tuple(meta.id, gfa)
+            assembly: HIFIASM_OUT.primary_contigs_fasta.map { meta, fasta_primary ->
+                tuple(meta.id, fasta_primary)
             },
             versions: HIFIASM_OUT.versions
         ]
