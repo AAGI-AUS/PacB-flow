@@ -19,4 +19,6 @@ export NXF_SINGULARITY_CACHEDIR="./work"
 nextflow run ./main.nf -resume \
 	-profile pawsey_setonix,singularity \
 	--manifest ./samples.tsv \
-	--assembler flye
+	--assembler flye \
+	--flye_scaffold true \
+        --flye_iterations 3

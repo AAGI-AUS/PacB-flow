@@ -19,4 +19,7 @@ export NXF_SINGULARITY_CACHEDIR="./work"
 nextflow run ./main.nf -resume \
 	-profile pawsey_setonix,singularity \
 	--manifest samples.tsv \
-	--ntlink_run true
+	--ntlink_run true \
+        --assembler flye \
+        --flye_scaffold true \
+        --flye_iterations 3

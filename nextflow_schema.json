@@ -37,6 +37,21 @@
         }
       }
     },
+    "flye_options": {
+      "title": "FLYE Assembly Options",
+      "type": "object",
+      "fa_icon": "fas fa-dna",
+      "description": "Parameters specific to FLYE assembler",
+      "help_text": "These parameters control the behavior of the FLYE assembler when selected as the primary assembly method.",
+      "properties": {
+        "flye_scaffold": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable scaffolding in FLYE assembly",
+          "help_text": "When enabled, FLYE will perform scaffolding to connect contigs into larger scaffolds using long-range information."
+        }
+      }
+    },
     "abyss_stats": {
       "title": "Abyss stats",
       "type": "object",
@@ -142,6 +157,9 @@
     },
     {
       "$ref": "#/definitions/generic_options"
+    },
+    {
+      "$ref": "#/definitions/flye_options"
     },
     {
       "$ref": "#/definitions/abyss_stats"

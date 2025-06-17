@@ -27,6 +27,8 @@ process FLYE {
     script:
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
+    def scaffold_arg = meta.scaffold ? '--scaffold' : ''
+    def iterations_arg = "--iterations ${meta.iterations}"
     def valid_mode = ["--pacbio-raw", "--pacbio-corr", "--pacbio-hifi", "--nano-raw", "--nano-corr", "--nano-hq"]
     if ( !valid_mode.contains(mode) )  { error "Unrecognised mode to run Flye. Options: ${valid_mode.join(', ')}" }
     """
@@ -34,11 +36,13 @@ process FLYE {
         $mode \\
         $reads \\
         --out-dir . \\
-        --threads \\
-        $task.cpus \\
+        --threads $task.cpus \\
+        $iterations_arg \\
+        $scaffold_arg \\
         $args
 
     #gzip -c assembly.fasta > ${prefix}.assembly.fasta.gz
+    mv assembly.fasta ${prefix}.assembly.fasta
     gzip -c assembly_graph.gfa > ${prefix}.assembly_graph.gfa.gz
     gzip -c assembly_graph.gv > ${prefix}.assembly_graph.gv.gz
     mv assembly_info.txt ${prefix}.assembly_info.txt

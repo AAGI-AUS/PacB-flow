@@ -16,10 +16,10 @@ include { MITOCONDRION_DOWNLOAD }                   from '../../../modules/local
 
 // Define functions
 def collectAssemblies(ASSEMBLY, allAssembliesChannel) {
-    return ASSEMBLY.map { it -> it[1] }
-    .mix(allAssembliesChannel)
-    .collect()
-}
+        return ASSEMBLY.map { it -> it[1] }
+        .mix(allAssembliesChannel)
+        .collect()
+        }
 
 workflow ASSEMBLY_PIPELINE {
 
@@ -30,19 +30,21 @@ workflow ASSEMBLY_PIPELINE {
     main:
         //
         allAssembliesChannel = Channel.empty()
-        
+
         // Initialize ASSEMBLY variable
         ASSEMBLY = [:]
         ch_versions = Channel.empty()
 
         // Choose assembly method based on parameter
         if (params.assembler == 'flye') {
-            // Debug: Check input
-            assembly_lr.view { "FLYE input: $it" }
 
-            // Prepare input for FLYE module
+            // Prepare input for FLYE module with scaffold info in meta
             flye_input_ch = assembly_lr.map { sample, reads ->
-                def meta = [id: sample]
+                def meta = [
+                id: sample,
+                scaffold: params.flye_scaffold ?: false,
+                iterations: params.flye_iterations ?: 1
+                ]
                 tuple(meta, reads)
             }
 
@@ -52,32 +54,36 @@ workflow ASSEMBLY_PIPELINE {
                 '--pacbio-hifi'  // String parameter
             )
 
-            // Debug: Check FLYE output
-            FLYE_ASSEMBLY.fasta.view { "FLYE primary contigs: $it" }
-
-            ASSEMBLY = [
+            FLYE_ASSEMBLY_OUT = [
                 assembly: FLYE_ASSEMBLY.fasta.map { meta, fasta_primary ->
                     tuple(meta.id, fasta_primary)
                 },
                 versions: FLYE_ASSEMBLY.versions
             ]
-            
-            ch_versions = ch_versions.mix(FLYE_ASSEMBLY.versions)
 
             // Fix join operation - ensure keys match
-            assembly_lr.join(ASSEMBLY.assembly)
+            assembly_lr.join(FLYE_ASSEMBLY_OUT.assembly)
                        .set { ch_readslr_assembly }
             COV_PRIMARY(ch_readslr_assembly)
+
+            ASSEMBLY = FLYE_ASSEMBLY_OUT
+
+            // Cleanup final genome
+            // Download the database
+            // MITO_CHECK = MITOCONDRION_DOWNLOAD(params.mito_dw)
+            // CLEANED_GENOME = CLEANUP_GENOME(ASSEMBLY.assembly, MITO_CHECK.mito_ref)
+
+            ch_versions = ch_versions.mix(FLYE_ASSEMBLY_OUT.versions)
 
         } else {
             // Default to CANU assembly
             CANU_ASSEMBLY_OUT = CANU_ASSEMBLY(assembly_lr)
-            
+
             // Fix join operation - ensure keys match
             assembly_lr.join(CANU_ASSEMBLY_OUT.assembly)
                        .set { ch_readslr_assembly }
             COV_PRIMARY(ch_readslr_assembly)
-            
+
             ASSEMBLY = CANU_ASSEMBLY_OUT
             ch_versions = ch_versions.mix(CANU_ASSEMBLY_OUT.versions)
         }
@@ -109,6 +115,9 @@ workflow ASSEMBLY_PIPELINE {
                             .set { ch_readslr_assembly_scaf }
             // Run COV_SCAF at ntLink stage
             COV_SCAF(ch_readslr_assembly_scaf)
+
+            MITO_CHECK = MITOCONDRION_DOWNLOAD(params.mito_dw)
+            CLEANED_GENOME = CLEANUP_GENOME(ASSEMBLY.assembly, MITO_CHECK.mito_ref)
 
             // Ensure the assembly after ntLink is mixed into all assemblies
             collectAssemblies(ASSEMBLY.assembly, all_assemblies)
@@ -189,7 +198,8 @@ workflow ASSEMBLY_PIPELINE {
             }
             .ifEmpty {
                 log.info "No samples with short reads found - skipping polishing for all samples"
-                Channel.empty()
+                //Channel.empty()
+                ASSEMBLY.assembly.view {"TEST"}
             }
             .set { samples_with_sr }
 
@@ -209,13 +219,7 @@ workflow ASSEMBLY_PIPELINE {
         // Run stats on final output
         ABYSS_FAC(all_assemblies)
 
-        // Download the database
-        MITO_CHECK = MITOCONDRION_DOWNLOAD(params.mito_dw)
-
-        // Cleanup final genome
-        CLEANED_GENOME = CLEANUP_GENOME(ASSEMBLY.assembly, MITO_CHECK.mito_ref)
-
-    emit:
+        emit:
         versions = ch_versions
         scaffolded = ASSEMBLY.assembly
         cleanup_final_genome = CLEANED_GENOME.out_genome
