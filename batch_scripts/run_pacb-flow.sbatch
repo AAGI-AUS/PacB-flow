@@ -10,7 +10,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --export=NONE
 
-module load nextflow/24.04.3
+module load nextflow/23.10.0
 module load singularity/4.1.0-slurm
 
 # IMPORTANT: singularity cache dir needs to be specified in order to download image when running default
@@ -18,7 +18,4 @@ export NXF_SINGULARITY_CACHEDIR="./work"
 
 nextflow run ./main.nf -resume \
 	-profile pawsey_setonix,singularity \
-	--manifest ./samples.tsv \
-	--assembler flye \
-	--flye_scaffold true \
-        --flye_iterations 3
+	--manifest samples.tsv	
