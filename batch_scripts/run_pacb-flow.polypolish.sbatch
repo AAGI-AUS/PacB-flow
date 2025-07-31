@@ -16,6 +16,7 @@ module load singularity/4.1.0-slurm
 # IMPORTANT: singularity cache dir needs to be specified in order to download image when running default
 export NXF_SINGULARITY_CACHEDIR="./work"
 
-nextflow run ./main.nf -resume \
-	-profile pawsey_setonix,singularity \
-	--manifest samples.tsv	
+nextflow run ./main.nf -profile pawsey_setonix,singularity \
+	-resume \
+	--polypolish_only \
+	--manifest samplesheet_polypolish.csv
