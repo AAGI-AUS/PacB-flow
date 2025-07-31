@@ -15,7 +15,7 @@ process BWA_INDEX {
         tuple val(sample_id), path(genome)
 
     output:
-	tuple path( genome ), path("${sample_id}.index*"), emit: bwa_index
+	tuple val(sample_id), path( genome ), path("${sample_id}.index*"), emit: index
 	path("versions.yml")                             , emit: versions
 
     script:

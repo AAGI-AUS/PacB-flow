@@ -1,0 +1,3 @@
+sampleId,lr_reads,sr_read1,sr_read2
+test_sample1,test_data/sample1_assembly.fasta,test_data/sample1_R1.fastq.gz,test_data/sample1_R2.fastq.gz
+test_sample2,test_data/sample2_assembly.fasta,test_data/sample2_R1.fastq.gz,test_data/sample2_R2.fastq.gz

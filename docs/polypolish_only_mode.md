@@ -7,24 +7,33 @@ The PacB-flow pipeline now supports a Polypolish-only mode that allows you to ru
 To run the pipeline in Polypolish-only mode:
 
 ```bash
-nextflow run main.nf --polypolish_only --manifest samplesheet_polypolish.csv
+nextflow run main.nf --polypolish_only --manifest samples.csv
 ```
 
 ## Input Format
 
-The samplesheet for Polypolish-only mode should be a CSV file with the following columns:
+Both standard assembly and Polypolish-only modes use the **same manifest format**:
 
 - `sampleId`: Unique sample identifier
-- `fasta`: Path to the input assembly FASTA file
-- `fastq_1`: Path to the first paired-end FASTQ file
-- `fastq_2`: Path to the second paired-end FASTQ file
+- `lr_reads`: For standard mode = long reads (PacBio); For polypolish-only = assembly FASTA file (.fasta, .fna, .fa, .fas)
+- `sr_read1`: Path to the first paired-end FASTQ file
+- `sr_read2`: Path to the second paired-end FASTQ file
 
-### Example samplesheet:
+### Example for Standard Assembly Mode:
 
 ```csv
-sampleId,fasta,fastq_1,fastq_2
+sampleId,lr_reads,sr_read1,sr_read2
+sample1,/path/to/sample1_longreads.fastq.gz,/path/to/sample1_R1.fastq.gz,/path/to/sample1_R2.fastq.gz
+sample2,/path/to/sample2_longreads.fastq.gz,/path/to/sample2_R1.fastq.gz,/path/to/sample2_R2.fastq.gz
+```
+
+### Example for Polypolish-Only Mode:
+
+```csv
+sampleId,lr_reads,sr_read1,sr_read2
 sample1,/path/to/sample1_assembly.fasta,/path/to/sample1_R1.fastq.gz,/path/to/sample1_R2.fastq.gz
-sample2,/path/to/sample2_assembly.fasta,/path/to/sample2_R1.fastq.gz,/path/to/sample2_R2.fastq.gz
+sample2,/path/to/sample2_assembly.fna,/path/to/sample2_R1.fastq.gz,/path/to/sample2_R2.fastq.gz
+sample3,/path/to/sample3_assembly.fa,/path/to/sample3_R1.fastq.gz,/path/to/sample3_R2.fastq.gz
 ```
 
 ## Output

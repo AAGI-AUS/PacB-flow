@@ -2,7 +2,7 @@
 // Subworkflow - polish genome
 //
 
-include { BWA_INDEX }                            from '../../../modules/nf-core/bwa/index/main'
+include { BWA_INDEX }                            from '../../../modules/nf-core/bwa/index'
 include { BWAMEM_MAPALL as BWAMEM_R1 }           from '../../../modules/local/software/bwa/mapallreads'
 include { BWAMEM_MAPALL as BWAMEM_R2 }           from '../../../modules/local/software/bwa/mapallreads'
 include { POLYPOLISHFILT }                       from '../../../modules/local/software/polypolish/polishgenome'
@@ -15,9 +15,10 @@ workflow POLISH_GENOME {
 	genome	                  // tuple [ sample, genome ]
 
     main:
-	// Pass the genome to the BWA_INDEX process
+	
 	indexed_genome = BWA_INDEX(genome)
 	
+	// We need to join by sample ID and extract the index path
         // Create channels for each R1 and R2 plus genome
 	sample_pair_genome.join(indexed_genome.index)
 		.map { sample, reads1, reads2, genome -> tuple(sample, reads1, genome)}
@@ -25,8 +26,8 @@ workflow POLISH_GENOME {
 
 	sample_pair_genome.join(indexed_genome.index)
                 .map { sample, reads1, reads2, genome -> tuple(sample, reads2, genome)}
-                .set { reads_gen_r2 }	
-
+                .set { reads_gen_r2 }
+        indexed_genome.index.view()
 	// Map reads individually using the indexed genome output as input for the index
         reads_R1 = BWAMEM_R1(
 		reads_gen_r1,

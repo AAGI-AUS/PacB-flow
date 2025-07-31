@@ -174,7 +174,7 @@
         },
         "polypolish_only": {
             "type": "boolean",
-            "description": "Run only Polypolish polishing on input fasta and reads (requires manifest with fasta, fastq_1, fastq_2 columns)",
+            "description": "Run only Polypolish polishing on input fasta and reads (uses same manifest format, lr_reads column contains FASTA file: .fasta/.fna/.fa/.fas)",
             "default": false
         }
     },

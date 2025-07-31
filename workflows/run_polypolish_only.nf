@@ -24,33 +24,33 @@ workflow POLYPOLISH_ONLY {
 
         //
         // Parse samplesheet for polypolish-only mode
-        // Expected format: sample,fasta,fastq_1,fastq_2
+        // Same format as standard: sampleId,lr_reads,sr_read1,sr_read2
+        // For polypolish-only: lr_reads column contains the FASTA file
         // Convert to format expected by POLISH_GENOME: sample_pair_genome and genome
         //
-        ch_samplesheet
-            .map { meta, fasta, fastq_1, fastq_2 ->
-                // Create the two channels needed by POLISH_GENOME
-                def sample_id = meta.id
-                return [
-                    tuple(sample_id, fastq_1, fastq_2),  // sample_pair_genome format
-                    tuple(sample_id, fasta)              // genome format
-                ]
-            }
-            .transpose()
-            .branch {
-                reads: it.size() == 3  // sample, fastq_1, fastq_2
-                    return it
-                genome: it.size() == 2  // sample, fasta
-                    return it
-            }
-            .set { ch_input }
+        // Create sample_pair_genome channel: tuple [ sample, reads_pair1, reads_pair2 ]
+	ch_samplesheet
+    		.map { meta, fasta, fastq_1, fastq_2 ->
+        		def sample_id = meta.id
+        		tuple(sample_id, fastq_1, fastq_2)
+    		}
+    		.set { sample_pair_reads }
+
+	// Create genome channel: tuple [ sample, genome ]
+	ch_samplesheet
+    		.map { meta, fasta, fastq_1, fastq_2 ->
+        		def sample_id = meta.id
+        		tuple(sample_id, fasta)
+    		}
+    		.set { genome }
+        // sample_pair_reads.view()
 
         //
         // SUBWORKFLOW: Polish genome with Polypolish
         //
         POLISH_GENOME(
-            ch_input.reads,
-            ch_input.genome
+            sample_pair_reads,
+            genome
         )
 
         //
@@ -66,6 +66,6 @@ workflow POLYPOLISH_ONLY {
 
     emit:
         polished_assemblies = POLISH_GENOME.out.assembly
-        stats              = ABYSS_FAC.out.stats
+        stats              = ABYSS_FAC.out.assembly_stats
         versions           = ch_versions
 }

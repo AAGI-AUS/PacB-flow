@@ -18,7 +18,7 @@ process BWA_INDEX {
     task.ext.when == null || task.ext.when
 
     script:
-    def prefix = task.ext.prefix ?: "${fasta.baseName}"
+    def prefix = task.ext.prefix ?: "${meta}"
     def args   = task.ext.args ?: ''
     """
     mkdir bwa_${meta}
