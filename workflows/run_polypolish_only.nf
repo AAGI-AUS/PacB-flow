@@ -6,6 +6,8 @@
 
 include { POLISH_GENOME }                           from '../subworkflows/local/run_polypolish/main'
 include { ABYSS_FAC }                               from '../modules/local/software/abyss/abyssfac-stats'
+include { CLEANUP_GENOME }                          from '../subworkflows/local/cleanup_genomes_final/main'
+include { MITOCONDRION_DOWNLOAD }                   from '../modules/local/software/download/downloadmito'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -60,12 +62,19 @@ workflow POLYPOLISH_ONLY {
             .map { sample, fasta -> fasta }
             .collect()
             .set { ch_all_assemblies }
+        
+        // Download the database
+	MITO_CHECK = MITOCONDRION_DOWNLOAD(params.mito_dw)
+
+	// Cleanup final genome
+	CLEANED_GENOME = CLEANUP_GENOME(POLISH_GENOME.out.assembly, MITO_CHECK.mito_ref)
 
         ABYSS_FAC(ch_all_assemblies)
         ch_versions = ch_versions.mix(ABYSS_FAC.out.versions)
 
     emit:
-        polished_assemblies = POLISH_GENOME.out.assembly
-        stats              = ABYSS_FAC.out.assembly_stats
-        versions           = ch_versions
+        polished_assemblies  = POLISH_GENOME.out.assembly
+        cleanup_final_genome = CLEANED_GENOME.out_genome
+        stats                = ABYSS_FAC.out.assembly_stats
+        versions             = ch_versions
 }

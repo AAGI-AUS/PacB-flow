@@ -4,7 +4,7 @@
 
 process POLYPOLISHFILT {
 
-    label 'medium_task'
+    label 'large_task'
     tag "Filter mapped reads."
 
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
@@ -35,7 +35,7 @@ process POLYPOLISHFILT {
 
 process POLYPOLISHPOLISH {
 
-    label 'medium_task'
+    label 'large_task'
     tag "Polish genome with mapped reads."
 
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
